@@ -1,0 +1,21 @@
+**/bin/
+**/obj/
+**/__pycache__/
+*.egg-info/
+dist/
+artifacts/
+GameData/KSPAutoCraft/PluginData/
+llm.local.json
+plans/
+**/PluginData/
+.env
+.env.*
+*.local.json
+*.local.jsonc
+*.dpapi.json
+**/auth.json
+**/connection.json
+**/service.lock
+
+# Local installation/flight reports are not public project documentation.
+/docs/VALIDATION*.md

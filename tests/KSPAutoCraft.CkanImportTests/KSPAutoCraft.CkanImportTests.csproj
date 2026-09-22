@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <CkanLibDirectory Condition="'$(CkanLibDirectory)' == ''">$(CKAN_LIB_DIRECTORY)</CkanLibDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Test-only reference to the local CKAN distribution; never shipped in the mod. -->
+    <Reference Include="ICSharpCode.SharpZipLib">
+      <HintPath>$(CkanLibDirectory)/ICSharpCode.SharpZipLib.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="CheckCkanLibrary" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(CkanLibDirectory)/ICSharpCode.SharpZipLib.dll')" Text="Set CKAN_LIB_DIRECTORY to a CKAN directory containing ICSharpCode.SharpZipLib.dll." />
+  </Target>
+</Project>

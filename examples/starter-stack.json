@@ -1,0 +1,38 @@
+{
+  "name": "AutoCraft Starter",
+  "facility": "VAB",
+  "parts": [
+    {
+      "id": "pod",
+      "partName": "mk1pod.v2",
+      "parentId": "",
+      "parentNodeId": "",
+      "childNodeId": "",
+      "stage": 0,
+      "rollDegrees": 0,
+      "resources": []
+    },
+    {
+      "id": "tank",
+      "partName": "fuelTank",
+      "parentId": "pod",
+      "parentNodeId": "bottom",
+      "childNodeId": "top",
+      "stage": 0,
+      "rollDegrees": 0,
+      "resources": []
+    },
+    {
+      "id": "engine",
+      "partName": "liquidEngine",
+      "parentId": "tank",
+      "parentNodeId": "bottom",
+      "childNodeId": "top",
+      "stage": 0,
+      "rollDegrees": 0,
+      "resources": []
+    }
+  ],
+  "maxWetMassTonnes": 0,
+  "maxCost": 0
+}

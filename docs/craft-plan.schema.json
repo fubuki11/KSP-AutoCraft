@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KSPAutoCraft v1 stack plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "facility", "parts"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\x00-\\x1f\\x7f{}=\\\\/]+$"},
+    "facility": {"enum": ["VAB", "SPH"]},
+    "maxWetMassTonnes": {"type": "number", "minimum": 0, "default": 0},
+    "maxCost": {"type": "number", "minimum": 0, "default": 0},
+    "parts": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/part"}}
+  },
+  "$defs": {
+    "part": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "partName", "stage"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,48}$"},
+        "partName": {"type": "string", "minLength": 1},
+        "parentId": {"type": "string"},
+        "parentNodeId": {"type": "string"},
+        "childNodeId": {"type": "string"},
+        "stage": {"type": "integer", "minimum": -1, "maximum": 99, "description": "Must use an integer JSON token, without decimal point/exponent. Highest KSP inverseStage fires first."},
+        "rollDegrees": {"type": "number", "minimum": -360, "maximum": 360, "default": 0},
+        "attachment": {"enum": ["stack", "surface"], "default": "stack"},
+        "radialAngleDegrees": {"type": "number", "minimum": -360, "maximum": 360, "default": 0},
+        "surfaceHeight": {"type": "number", "minimum": -1, "maximum": 1, "default": 0},
+        "surfaceOrientation": {"enum": ["default", "wing", "fin"], "default": "default"},
+        "mirrorOf": {"type": "string", "description": "Earlier matching SPH surface part; parent must be shared on centre plane or the mirrored parent."},
+        "resources": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/resource"}}
+      }
+    },
+    "resource": {
+      "type": "object", "additionalProperties": false, "required": ["name", "amount"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "amount": {"type": "number", "minimum": 0}}
+    }
+  },
+  "$comment": "The server additionally enforces finite values, exact tokens, no duplicate keys, nonblank names, unique ids/resources, ordering, attachment rules, unlock state, geometry, capacity and cost/mass limits against the live catalog."
+}
