@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ksp-autocraft"
-version = "0.6.1"
+version = "0.7.0"
 authors = [{name = "fubuki11st"}]
 description = "Contract-aware natural-language spacecraft design and KSP editor API client"
 requires-python = ">=3.10"

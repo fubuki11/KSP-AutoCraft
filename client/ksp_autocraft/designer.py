@@ -315,7 +315,7 @@ def design(client, model, prompt: str, *, contract_id=None, budget=None, max_mas
     base_messages = list(messages)
     prompt_bytes = len(json.dumps(messages, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     last_error = "No design generated."
-    recovery_used, budget_boosted, recoveries = False, False, []
+    recovered_strategies, recovery_reasons, recoveries = set(), [], []
     for attempt in range(1, attempts + 1):
         if attempt > 1:
             if client.world().get("saveName") != world.get("saveName") or client.health().get("facility") != health.get("facility"):
@@ -323,15 +323,19 @@ def design(client, model, prompt: str, *, contract_id=None, budget=None, max_mas
             if _contract_fingerprint(client.contract(contract_id) if contract_id else None) != _contract_fingerprint(detail):
                 raise ContextChangedError("Contract changed before correction. No further model request was sent.")
         try:
-            value = model.generate(messages, recovery=True) if budget_boosted else model.generate(messages)
+            if recovery_reasons:
+                value = model.generate(messages, recovery="output_truncated" in recovery_reasons, recovery_reasons=list(recovery_reasons))
+            else:
+                value = model.generate(messages)
         except LLMError as error:
-            if not error.recoverable or recovery_used or attempt == attempts:
+            if not error.recoverable or error.recovery_strategy in recovered_strategies or attempt == attempts:
                 raise
-            recovery_used = True
-            budget_boosted = error.code == "output_truncated"
+            recovered_strategies.add(error.recovery_strategy)
+            recovery_reasons.append(error.code)
             recoveries.append({"attempt": attempt, "code": error.code, "details": error.details})
             messages = correction_messages(base_messages, "The previous response failed: " + error.code +
                 ". Return one COMPLETE compact JSON design object. Do not include thinking, markdown or catalog copies. "
+                "Restart from the supplied constraints rather than continuing repetitive generation. "
                 "Keep explanations brief and omit unused/default part fields. Preserve all required performance/contract targets.")
             continue
         try:
@@ -367,7 +371,7 @@ def design(client, model, prompt: str, *, contract_id=None, budget=None, max_mas
             if fresh_world.get("gameMode") == "CAREER" and fresh_world.get("hasFunds") and validation["estimatedCost"] > fresh_world["funds"]:
                 raise ContextChangedError("Career funds changed and are now below the design cost.")
             report = {"schemaVersion": 1, "model": model.model, "pluginVersion": fresh_health.get("version"), "request": prompt, "attempts": attempt,
-                      "modelRecoveries": recoveries, "promptBytes": prompt_bytes,
+                      "modelRecoveries": recoveries, "modelRequests": getattr(model, "events", []), "promptBytes": prompt_bytes,
                       "contractSnapshot": fresh, "contractFingerprint": _contract_fingerprint(fresh),
                       "validation": validation, "assessment": assessment, "performance": performance, "vehicleType": vehicle, "missionSteps": value["missionSteps"],
                       "assumptions": value["assumptions"], "rationale": value["rationale"],

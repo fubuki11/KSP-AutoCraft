@@ -1,10 +1,10 @@
-# KSP AutoCraft 0.6.1
+# KSP AutoCraft 0.7.0
 
 **作者：fubuki11st** · **MIT License** · **KSP 1.12.5 / Windows x64**
 
 在 KSP 的 VAB/SPH 中通过自然语言和合同要求生成候选构型。AutoCraft 读取实际游戏数据，经模型规划、结构/性能检查和有界修正后写出 `.craft`，由玩家确认载入。
 
-**依赖：[KSP AI Hub 0.3.0+](https://github.com/fubuki11/KSP-AIHub)。** 供应商、API Key、OAuth 和模型选择统一由 Hub 管理；本项目不包含独立模型登录。
+**依赖：[KSP AI Hub 0.4.0+](https://github.com/fubuki11/KSP-AIHub)。** 供应商、API Key、OAuth 和模型选择统一由 Hub 管理；本项目不包含独立模型登录。
 
 ## 功能
 
@@ -13,7 +13,7 @@
 - 火箭与飞机分别选型；支持栈式/表面连接、SPH 水平姿态、翼面方向和镜像配对。
 - 筛选分级 Δv、TWR、燃料可达性，以及飞机升力/阻力、进气、航时、稳定裕度和支撑布局。
 - 游戏内选择合同、输入需求、查看报告、生成候选与手动确认载入。
-- 模型侧目录压缩、明确的截断/格式错误恢复；全部调用共享最多三次尝试，模型错误恢复最多一次。
+- 模型侧目录压缩；预算、格式、重复截断分别使用一次针对性恢复，全部生成/修正仍共享最多三次尝试；失败任务保留可关联的安全诊断记录。
 - 本机编辑器 HTTP API、Python 命令行工具和 CKAN 兼容打包。
 
 性能检查是有近似边界的飞行前筛选，不是完整轨迹/CFD 仿真。通过检查不等于实际飞行或合同完成；仍需检查布局、分级、操控与任务执行。不会自动发射、接受或完成合同。
@@ -91,6 +91,7 @@ python -m ksp_autocraft --ksp-root $ksp validate (Join-Path $project 'examples\s
 - `desktop.json`：Python 路径和候选生成权限。
 - `Designs/`：设计 JSON 与报告。
 - `Builds/`：候选 `.craft`；`Backups/`：确认载入前的飞船备份。
+- `Diagnostics/`：最近 32 个失败设计任务的安全元数据，可通过请求编号关联 Hub 的调用记录。
 
 这些文件、个人方案和凭据不进入源码或发布包。HTTP 仅监听 `127.0.0.1`，游戏 API 在主线程执行；没有远程载入、删除或发射接口。
 
@@ -118,7 +119,7 @@ dotnet run --project tests/KSPAutoCraft.DispatchTests --configuration Release
 源码通过 Git 管理，安装包通过 [GitHub Releases](https://github.com/fubuki11/KSP-AutoCraft/releases) 分发。准备 Release 时用公开 HTTPS 地址重新构建：
 
 ```powershell
-& (Join-Path $project 'scripts\build.ps1') -KspRoot $ksp -DownloadUrl 'https://github.com/fubuki11/KSP-AutoCraft/releases/download/v0.6.1/KSPAutoCraft-0.6.1.zip'
+& (Join-Path $project 'scripts\build.ps1') -KspRoot $ksp -DownloadUrl 'https://github.com/fubuki11/KSP-AutoCraft/releases/download/v0.7.0/KSPAutoCraft-0.7.0.zip'
 ```
 
 输出插件 ZIP、独立客户端 ZIP、`.ckan` 和本地索引 ZIP。省略 `-DownloadUrl` 时使用本机 `file://` 地址；该地址不能作为其他电脑的公共下载地址。源码推送不会自动创建 Release，也不等于 CKAN 公共索引收录。

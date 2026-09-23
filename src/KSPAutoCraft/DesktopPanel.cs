@@ -11,7 +11,7 @@ namespace KSPAutoCraft
 {
     internal static class ReleaseInfo
     {
-        internal const string Version = "0.6.1";
+        internal const string Version = "0.7.0";
         internal const string Author = "fubuki11st";
     }
     [Serializable] internal sealed class DesktopSettings
@@ -31,7 +31,7 @@ namespace KSPAutoCraft
     [Serializable] internal sealed class DesktopReply
     {
         public bool ok, apiReady, modelReady;
-        public string task, pluginVersion, modelStatus, planFile, reportFile, assessment, error;
+        public string task, pluginVersion, modelStatus, planFile, reportFile, assessment, error, diagnosticFile;
         public int partCount;
         public double wetMassTonnes, estimatedCost;
         public string[] missionSteps, assumptions;
@@ -110,6 +110,7 @@ namespace KSPAutoCraft
                 try { failure = JsonUtility.FromJson<DesktopReply>(result.stdout); } catch { }
                 Status = failure != null && !string.IsNullOrEmpty(failure.error) ? Plain(failure.error, 1500) :
                     "后台任务结束：" + result.state + ". " + Plain(result.stderr, 800);
+                if (failure != null && !string.IsNullOrEmpty(failure.diagnosticFile)) Status += "\n诊断记录：" + Plain(failure.diagnosticFile, 600);
                 if (task == "health") ConnectionStatus = "Python/API：检查失败";
                 return;
             }

@@ -41,7 +41,7 @@ CKAN 1.36.4 某些 ZIP 导入路径没有及时释放 `ZipFile`，随后删除/�
 ## 只读诊断
 
 ```powershell
-.\scripts\diagnose-import.ps1 -Archive '.\dist\KSPAutoCraft-0.6.1.zip'
+.\scripts\diagnose-import.ps1 -Archive '.\dist\KSPAutoCraft-0.7.0.zip'
 ```
 
 如果操作的是其他位置的 ZIP，填写实际路径。工具检查共享/独占读取、注册表和 Windows Restart Manager 的持有进程信息，不结束进程、不删除锁文件。

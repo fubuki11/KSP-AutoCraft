@@ -96,12 +96,12 @@ class FaultyModel(FakeModel):
         super().__init__()
         self.faults, self.recovery_flags = list(faults), []
 
-    def generate(self, messages, *, recovery=False):
+    def generate(self, messages, *, recovery=False, recovery_reasons=None):
         self.recovery_flags.append(recovery)
         fault = self.faults.pop(0) if self.faults else None
         if fault:
             self.calls.append(copy.deepcopy(messages))
-            raise LLMError("fixture failure", code=fault, details={"outputTokens": 6000})
+            raise LLMError("fixture failure", code=fault, details={"outputTokens": 6000, "recoveryAllowed": fault == "model_repetition" or fault in ("output_truncated", "invalid_json_output", "empty_model_output")})
         return super().generate(messages)
 
 
@@ -188,6 +188,21 @@ class DesignerTests(unittest.TestCase):
         _, report = design(FakeGame(), model, "rocket")
         self.assertEqual(model.recovery_flags, [False, False])
         self.assertEqual(report["attempts"], 2)
+
+    def test_truncation_then_repetition_recovers_within_three_total_calls(self):
+        model, game = FaultyModel('output_truncated', 'model_repetition'), FakeGame()
+        _, report = design(game, model, 'rocket')
+        self.assertEqual(model.recovery_flags, [False, True, True])
+        self.assertEqual([r['code'] for r in report['modelRecoveries']], ['output_truncated', 'model_repetition'])
+        self.assertEqual(len(game.validated), 1)
+        self.assertEqual(len(model.calls), 3)
+
+    def test_repeated_repetition_and_equivalent_format_errors_do_not_loop(self):
+        for errors in (('model_repetition', 'model_repetition'), ('invalid_json_output', 'empty_model_output')):
+            model, game = FaultyModel(*errors), FakeGame()
+            with self.assertRaises(LLMError): design(game, model, 'rocket')
+            self.assertEqual(len(model.calls), 2)
+            self.assertFalse(game.validated)
 
     def test_model_recovery_is_bounded_and_incomplete_output_never_reaches_game(self):
         model, game = FaultyModel("output_truncated", "output_truncated"), FakeGame()

@@ -1,14 +1,56 @@
 """One-shot machine interface for the in-game panel, with no model call at startup."""
 from pathlib import Path
 import json
+import os
+import re
+import tempfile
+import uuid
+from datetime import datetime, timezone
 
 from .designer import design, write_design
-from .llm import strict_json
+from .llm import strict_json, diagnostic_metadata
 from .gateway import GatewayModelClient
 
 
 def _short_strings(values, limit):
     return [str(value)[:1000] for value in values[:limit]]
+
+
+def _record_failure(ksp_root, job, error, model):
+    temporary = None
+    try:
+        root = Path(ksp_root)
+        if not root.is_absolute() or not (root / "GameData/KSPAutoCraft").is_dir(): return ""
+        folder = root / "GameData/KSPAutoCraft/PluginData/Diagnostics"
+        folder.mkdir(parents=True, exist_ok=True)
+        token = getattr(model, "_token", "") if model is not None else ""
+        if not isinstance(token, str): token = ""
+        events = getattr(model, "events", []) if model is not None else []
+        requests = []
+        if isinstance(events, list):
+            for event in events[-8:]:
+                if isinstance(event, dict):
+                    safe = diagnostic_metadata(event, token)
+                    if type(event.get("attempt")) is int: safe["attempt"] = event["attempt"]
+                    requests.append(safe)
+        code = diagnostic_metadata({"code": getattr(error, "code", "local_design_error")}, token).get("code", "local_design_error")
+        value = {"schemaVersion": 1, "createdUtc": datetime.now(timezone.utc).isoformat(), "task": "design",
+                 "pluginVersion": job["expectedVersion"], "code": code, "modelRequests": requests,
+                 "lastError": diagnostic_metadata(getattr(error, "details", {}), token)}
+        path = folder / ("task-" + uuid.uuid4().hex + ".json")
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".taskdiag-", dir=folder, delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(value, handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        os.replace(temporary, path); temporary = None
+        files = [p for p in folder.glob("task-*.json") if p.is_file() and not p.is_symlink() and re.fullmatch(r"task-[a-f0-9]{32}\.json", p.name)]
+        for old in sorted(files, key=lambda p: p.stat().st_mtime_ns, reverse=True)[32:]: old.unlink()
+        return str(path)
+    except (OSError, ValueError, TypeError):
+        return ""
+    finally:
+        if temporary is not None:
+            try: temporary.unlink(missing_ok=True)
+            except OSError: pass
 
 
 def run_job(client, job_path: Path, ksp_root=None) -> dict:
@@ -41,12 +83,17 @@ def run_job(client, job_path: Path, ksp_root=None) -> dict:
         raise ValueError("Desktop output must be an absolute .json path in an existing directory.")
     if output.exists() or output.with_suffix(".report.json").exists():
         raise ValueError("Desktop output already exists.")
-    model = GatewayModelClient(ksp_root)
-    model.check_ready()
-    plan, report = design(client, model, job.get("prompt"), contract_id=job.get("contractId"),
-                          budget=job.get("budget"), max_mass=job.get("maxMass"), vehicle=job.get("vehicle") or "auto",
-                          target_altitude=job.get("targetAltitude"), cruise_speed=job.get("cruiseSpeed"), required_delta_v=job.get("requiredDeltaV"),
-                          min_twr=job.get("minTwr"), max_stall_speed=job.get("maxStallSpeed"), min_endurance=job.get("minEndurance"))
+    model = None
+    try:
+        model = GatewayModelClient(ksp_root)
+        model.check_ready()
+        plan, report = design(client, model, job.get("prompt"), contract_id=job.get("contractId"),
+                              budget=job.get("budget"), max_mass=job.get("maxMass"), vehicle=job.get("vehicle") or "auto",
+                              target_altitude=job.get("targetAltitude"), cruise_speed=job.get("cruiseSpeed"), required_delta_v=job.get("requiredDeltaV"),
+                              min_twr=job.get("minTwr"), max_stall_speed=job.get("maxStallSpeed"), min_endurance=job.get("minEndurance"))
+    except Exception as error:
+        error.diagnostic_file = _record_failure(ksp_root, job, error, model)
+        raise
     report_path = write_design(output, plan, report)
     reply.update(planFile=str(output), reportFile=str(report_path), assessment=report["assessment"]["status"],
                  partCount=len(plan["parts"]), wetMassTonnes=report["validation"]["wetMassTonnes"],

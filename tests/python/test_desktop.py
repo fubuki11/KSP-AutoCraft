@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
 from ksp_autocraft.desktop import run_job, write_reply
+from ksp_autocraft.llm import LLMError
 
 
 class DesktopTests(unittest.TestCase):
@@ -82,6 +83,33 @@ class DesktopTests(unittest.TestCase):
         self.job['modelConfig'] = 'legacy-direct.json'
         with self.assertRaises(ValueError): self.run_job()
         self.client.health.assert_not_called()
+
+    def test_failed_design_writes_only_safe_diagnostic_metadata(self):
+        (self.root / 'GameData/KSPAutoCraft').mkdir(parents=True)
+        self.job.update(task='design', prompt='PRIVATE PROMPT', output=str(self.root / 'failed.json'))
+        model = MagicMock()
+        model._token = 'private-ipc-token'
+        model.events = [{'attempt': 1, 'code': 'model_repetition', 'requestId': 'a' * 32,
+                         'finishReason': 'repetition_truncation', 'rawOutput': 'PRIVATE OUTPUT'}]
+        error = LLMError('PRIVATE ERROR TEXT', code='model_repetition', details={'finishReason': 'repetition_truncation', 'debug': 'PRIVATE SECRET'})
+        with patch('ksp_autocraft.desktop.GatewayModelClient', return_value=model), patch('ksp_autocraft.desktop.design', side_effect=error):
+            with self.assertRaises(LLMError) as raised: self.run_job()
+        path = Path(raised.exception.diagnostic_file)
+        text = path.read_text()
+        for secret in ('PRIVATE PROMPT', 'PRIVATE OUTPUT', 'PRIVATE ERROR TEXT', 'PRIVATE SECRET', model._token): self.assertNotIn(secret, text)
+        record = json.loads(text)
+        self.assertEqual(record['modelRequests'][0]['requestId'], 'a' * 32)
+        self.assertFalse((self.root / 'failed.json').exists())
+        self.client.build.assert_not_called()
+
+    def test_diagnostic_write_failure_preserves_original_model_error(self):
+        (self.root / 'GameData/KSPAutoCraft').mkdir(parents=True)
+        self.job.update(task='design', prompt='rocket', output=str(self.root / 'failed.json'))
+        error = LLMError('original', code='model_repetition')
+        with patch('ksp_autocraft.desktop.GatewayModelClient'), patch('ksp_autocraft.desktop.design', side_effect=error), patch('ksp_autocraft.desktop.tempfile.NamedTemporaryFile', side_effect=OSError('disk full')):
+            with self.assertRaises(LLMError) as raised: self.run_job()
+        self.assertIs(raised.exception, error)
+        self.assertEqual(raised.exception.diagnostic_file, '')
 
     def test_large_job_and_wrong_text_types_are_rejected(self):
         self.path.write_bytes(b"x" * 65537)

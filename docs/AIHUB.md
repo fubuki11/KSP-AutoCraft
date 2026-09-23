@@ -1,8 +1,10 @@
-# AutoCraft 0.6.1：统一通过 AI Hub 接入与有界恢复
+# AutoCraft 0.7.0：统一通过 AI Hub 接入与有界恢复
 
-AutoCraft 现在依赖 **KSPAIHub 0.3.0+**。供应商地址、API Key、OAuth、模型目录和模型选择全部在 **AI Hub** 管理，AutoCraft 不再提供独立模型配置入口。
+AutoCraft 现在依赖 **KSPAIHub 0.4.0+**。供应商地址、API Key、OAuth、模型目录和模型选择全部在 **AI Hub** 管理，AutoCraft 不再提供独立模型配置入口。
 
-0.6.0 对 Hub 明确报告的截断、JSON 格式错误或空正文最多恢复一次，计入总共最多三次尝试；截断时可以使用配置档允许的恢复预算。网络失败、未完成的流和拒绝不会自动重放。恢复前重新检查存档/合同；报告记录 `modelRecoveries` 和 `promptBytes`。
+0.7.0 对额度、格式、明确重复截断各使用一次对应恢复策略，计入总共最多三次尝试。同类错误反复出现时停止。重复截断按 Hub 的配置档策略临时降低思考，额度不足可以同时使用受限恢复预算；不会覆盖正常请求设置。网络失败、未完成的流和拒绝不会自动重放。恢复前重新检查存档/合同；成功报告记录 `modelRecoveries`、`modelRequests` 和 `promptBytes`。
+
+游戏内失败任务会在 `PluginData/Diagnostics/task-<id>.json` 保存安全错误元数据，面板显示文件路径。通过其中的 Hub 请求编号可查找 `KSPAIHub/PluginData/Private/Diagnostics/generation-<requestId>.json`。这些记录不保存提示词、模型正文、思考内容或密钥。
 
 部件目录采用列式编码和模型侧精度压缩，已选部件集合及校验器的原始数值保持完整。可以在 Hub 的 **Generation limits / reasoning** 面板调整预算和推理参数。
 

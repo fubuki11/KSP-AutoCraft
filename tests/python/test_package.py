@@ -177,7 +177,7 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(metadata["ksp_version"], version_string(self.version_data["KSP_VERSION"]))
         self.assertEqual(metadata["ksp_version"], version_string(packaged_version["KSP_VERSION"]))
         self.assertEqual(metadata["install"], [{"file": "GameData/KSPAutoCraft", "install_to": "GameData"}])
-        self.assertEqual(metadata["depends"], [{"name": "KSPAIHub", "min_version": "0.3.0"}])
+        self.assertEqual(metadata["depends"], [{"name": "KSPAIHub", "min_version": "0.4.0"}])
 
     def test_download_is_actual_archive_file_uri_or_absolute_https(self):
         metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))

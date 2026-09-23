@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except (APIError, TransportError, ProtocolError, DesignError, LLMError, ValueError, OSError) as error:
         if args.command == "desktop-worker":
-            write_reply({"ok": False, "error": str(error)[:3000]})
+            write_reply({"ok": False, "error": str(error)[:3000], "diagnosticFile": getattr(error, "diagnostic_file", "")})
             return 1
         print(f"error: {error}", file=sys.stderr)
         return 1

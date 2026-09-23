@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
-from .llm import LLMError, _NoRedirects, strict_json
+from .llm import LLMError, _NoRedirects, strict_json, diagnostic_metadata
 
 
 class GatewayModelClient:
@@ -19,16 +19,17 @@ class GatewayModelClient:
             raise LLMError("The KSP installation path must be absolute.")
         hub = root / "GameData/KSPAIHub"
         if not (hub / "Plugins/KSPAIHub.dll").is_file():
-            raise LLMError("KSP AI Hub is not installed in this game. Install KSPAIHub 0.3.0+ through CKAN, then restart KSP.")
+            raise LLMError("KSP AI Hub is not installed in this game. Install KSPAIHub 0.4.0+ through CKAN, then restart KSP.")
         try:
             version = strict_json((hub / "KSPAIHub.version").read_text(encoding="utf-8-sig"))["VERSION"]
             parts = tuple(version[name] for name in ("MAJOR", "MINOR", "PATCH"))
-            if any(type(p) is not int or p < 0 for p in parts) or parts < (0, 3, 0): raise ValueError
+            if any(type(p) is not int or p < 0 for p in parts) or parts < (0, 4, 0): raise ValueError
         except (OSError, ValueError, TypeError, KeyError):
-            raise LLMError("KSP AI Hub installation is incomplete or older than 0.3.0. Repair/upgrade it through CKAN.") from None
+            raise LLMError("KSP AI Hub installation is incomplete or older than 0.4.0. Repair/upgrade it through CKAN.") from None
         self.client_id = "KSPAutoCraft"
         self.max_catalog_parts = max_catalog_parts
         self.timeout = timeout
+        self.events = []
         if type(self.max_catalog_parts) is not int or not 20 <= self.max_catalog_parts <= 300:
             raise ValueError("maxCatalogParts must be 20-300.")
         if isinstance(self.timeout, bool) or not isinstance(self.timeout, (int, float)) or not math.isfinite(self.timeout) or not 1 <= self.timeout <= 630:
@@ -49,6 +50,8 @@ class GatewayModelClient:
         health = self._call("GET", "/v1/health")
         if type(health.get("apiVersion")) is not int or health["apiVersion"] != 1:
             raise LLMError("The running AI Hub service uses an incompatible API. Restart/update AI Hub.")
+        if not {"recovery-reasons", "generation-diagnostics"}.issubset(health.get("capabilities", [])):
+            raise LLMError("Restart/update AI Hub to 0.4.0+ for repetition recovery and diagnostics.")
         self.hub_version = health.get("version", "unknown")
         # Pin this design session's selection. Later UI switches affect future sessions.
         selection = self._call("GET", "/v1/ui?" + urlencode({"clientId": self.client_id}))
@@ -74,9 +77,11 @@ class GatewayModelClient:
             finally: error.close()
             code = value.get("code", "gateway_error") if isinstance(value, dict) else "gateway_error"
             message = value.get("message", "AI Hub rejected the request.") if isinstance(value, dict) else "AI Hub rejected the request."
-            details = value.get("details", {}) if isinstance(value, dict) else {}
-            details = {k: v for k, v in details.items() if k in ("outputLimit", "recoveryLimit", "inputTokens", "outputTokens", "reasoningTokens", "httpStatus") and type(v) is int} if isinstance(details, dict) else {}
-            raise LLMError((str(code) + ": " + str(message)).replace(self._token, "[REDACTED]"), code=str(code), details=details) from None
+            details = diagnostic_metadata(value.get("details", {}), self._token) if isinstance(value, dict) else {}
+            if isinstance(value, dict): details.update(diagnostic_metadata({"requestId": value.get("requestId")}, self._token))
+            safe_code = diagnostic_metadata({"code": code}, self._token).get("code", "gateway_error")
+            suffix = " [Hub request " + details["requestId"] + "]" if details.get("requestId") else ""
+            raise LLMError((safe_code + ": " + str(message)).replace(self._token, "[REDACTED]") + suffix, code=safe_code, details=details) from None
         except (URLError, OSError, HTTPException, ValueError, TypeError):
             raise LLMError("Cannot communicate with the installed AI Hub service. Open AI Hub, Start service, then check again.") from None
 
@@ -86,9 +91,15 @@ class GatewayModelClient:
         if not selected or selected.get("authState") not in ("ready", "refresh_needed"):
             raise LLMError("The selected AI Hub profile needs configuration or sign-in. Open the AI Hub panel.")
 
-    def generate(self, messages, *, recovery=False):
-        value = self._call("POST", "/v1/generate", {"clientId": self.client_id, "profile": self.profile,
-            "model": self.model, "format": "json", "messages": messages, "recovery": recovery})
+    def generate(self, messages, *, recovery=False, recovery_reasons=None):
+        body = {"clientId": self.client_id, "profile": self.profile, "model": self.model, "format": "json", "messages": messages, "recovery": recovery}
+        if recovery_reasons: body["recoveryReasons"] = list(recovery_reasons)
+        try:
+            value = self._call("POST", "/v1/generate", body)
+        except LLMError as error:
+            self.events.append({"attempt": len(self.events)+1, "code": error.code, **diagnostic_metadata(error.details, self._token)})
+            raise
+        self.events.append({"attempt": len(self.events)+1, "code": "success", **diagnostic_metadata(value.get("metadata", value), self._token)})
         try:
             result = strict_json(value["jsonText"])
             if not isinstance(result, dict) or self._token in json.dumps(result, ensure_ascii=False): raise ValueError

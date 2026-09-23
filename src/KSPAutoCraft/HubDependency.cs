@@ -15,14 +15,14 @@ namespace KSPAutoCraft
             Available = false;
             string dll = Path.Combine(gameRoot, "GameData", "KSPAIHub", "Plugins", "KSPAIHub.dll");
             if (!File.Exists(dll))
-                Status = "AI Hub：未安装。请通过 CKAN 安装 KSPAIHub 0.3.0 或更新版本，然后重启 KSP。";
+                Status = "AI Hub：未安装。请通过 CKAN 安装 KSPAIHub 0.4.0 或更新版本，然后重启 KSP。";
             else
             {
                 var assembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "KSPAIHub");
                 if (assembly == null)
                     Status = "AI Hub：文件存在，但插件未加载。请检查安装并重启 KSP。";
-                else if (assembly.GetName().Version < new Version(0, 3, 0, 0))
-                    Status = "AI Hub：版本过旧。请升级到 0.3.0 或更新版本并重启 KSP。";
+                else if (assembly.GetName().Version < new Version(0, 4, 0, 0))
+                    Status = "AI Hub：版本过旧。请升级到 0.4.0 或更新版本并重启 KSP。";
                 else
                 {
                     Available = true;

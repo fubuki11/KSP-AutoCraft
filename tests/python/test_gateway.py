@@ -20,7 +20,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.server.requests.append((self.command, self.path, dict(self.headers), None))
         if self.path == '/v1/health':
-            self.respond({"ok": True, "apiVersion": self.server.api_version, "version": "0.3.0"})
+            self.respond({"ok": True, "apiVersion": self.server.api_version, "version": "0.4.0", "capabilities": self.server.capabilities})
         elif self.path.startswith('/v1/ui'):
             self.respond({"ok": True, "routingReady": self.server.routing_ready, "selectedProfile": "first", "model": self.server.model})
         else:
@@ -47,12 +47,13 @@ class GatewayTests(unittest.TestCase):
         (self.hub / 'Plugins').mkdir(parents=True)
         (self.hub / 'PluginData').mkdir()
         (self.hub / 'Plugins/KSPAIHub.dll').write_bytes(b'installed Hub fixture')
-        (self.hub / 'KSPAIHub.version').write_text(json.dumps({'VERSION': {'MAJOR': 0, 'MINOR': 3, 'PATCH': 0}}))
+        (self.hub / 'KSPAIHub.version').write_text(json.dumps({'VERSION': {'MAJOR': 0, 'MINOR': 4, 'PATCH': 0}}))
         self.path = self.hub / 'PluginData/connection.json'
         self.token = 'gateway-test-token-at-least-32-characters'
         self.path.write_text(json.dumps({'endpoint': f'http://127.0.0.1:{self.server.server_port}', 'token': self.token}))
         self.server.status = 200; self.server.requests = []; self.server.model = 'model-a'; self.server.auth_state = 'ready'
         self.server.api_version = 1; self.server.routing_ready = True
+        self.server.capabilities = ['recovery-reasons', 'generation-diagnostics']
         self.server.result = {'ok': True, 'jsonText': '{"plan":{}}'}
     def test_auto_discovery_ignores_legacy_provider_environment(self):
         with patch.dict(os.environ, {'AUTOCRAFT_LLM_BASE_URL': 'https://unrelated.example/v1', 'AUTOCRAFT_LLM_MODEL': 'independent-model', 'AUTOCRAFT_LLM_API_KEY': 'must-not-be-sent'}):
@@ -103,6 +104,27 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(error.exception.details, {'outputLimit': 6000, 'reasoningTokens': 6000})
         self.assertNotIn(self.token, str(error.exception))
         self.assertTrue(self.server.requests[-1][3]['recovery'])
+
+    def test_repetition_marker_request_id_and_transport_flags_survive_gateway(self):
+        client = GatewayModelClient(self.root)
+        request_id = 'a' * 32
+        self.server.status = 502
+        self.server.result = {'ok': False, 'code': 'model_repetition', 'message': 'repetitive generation', 'requestId': request_id,
+                              'details': {'finishReason': 'repetition_truncation', 'recoveryAllowed': True,
+                                          'requestStreaming': False, 'responseStreaming': False, 'rawOutput': self.token}}
+        with self.assertRaises(LLMError) as error:
+            client.generate([{'role': 'user', 'content': 'test'}], recovery_reasons=['model_repetition'])
+        self.assertTrue(error.exception.recoverable)
+        self.assertEqual(error.exception.details['finishReason'], 'repetition_truncation')
+        self.assertEqual(error.exception.details['requestId'], request_id)
+        self.assertFalse(error.exception.details['responseStreaming'])
+        self.assertNotIn('rawOutput', error.exception.details)
+        self.assertEqual(client.events[-1]['requestId'], request_id)
+        self.assertEqual(self.server.requests[-1][3]['recoveryReasons'], ['model_repetition'])
+
+    def test_old_running_hub_is_rejected_even_if_new_files_are_installed(self):
+        self.server.capabilities = []
+        with self.assertRaisesRegex(LLMError, 'Restart/update'): GatewayModelClient(self.root)
 
     def test_old_or_incomplete_installation_is_rejected(self):
         version = self.hub / 'KSPAIHub.version'

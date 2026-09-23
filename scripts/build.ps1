@@ -188,7 +188,7 @@ $metadata = [ordered] @{
     version = $version
     ksp_version = $versions['KSP_VERSION']
     download = $download
-    depends = @(@{ name = 'KSPAIHub'; min_version = '0.3.0' })
+    depends = @(@{ name = 'KSPAIHub'; min_version = '0.4.0' })
     install = @(@{ file = 'GameData/KSPAutoCraft'; install_to = 'GameData' })
 }
 
